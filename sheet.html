@@ -903,6 +903,9 @@
         gap: 8px;
         color: var(--fg);
       }
+      .spell-book-panel .item-panel-body {
+        min-height: 180px;
+      }
       .item-row {
         display: grid;
         grid-template-columns: 120px 1fr;
@@ -971,9 +974,6 @@
         display: none;
       }
       .class-picker.locked #class-picker-close {
-        display: none;
-      }
-      .alignment-picker.locked #alignment-picker-close {
         display: none;
       }
       .background-picker.locked #background-picker-close {
@@ -1079,7 +1079,7 @@
         margin-bottom: 4px;
       }
       .class-equipment-picker .weapon-picker-header {
-        grid-template-columns: 1fr auto auto;
+        grid-template-columns: 1fr auto;
       }
       .class-equipment-body {
         display: grid;
@@ -1133,7 +1133,7 @@
         color: var(--muted);
       }
       .alignment-picker .weapon-picker-header {
-        grid-template-columns: 1fr auto auto;
+        grid-template-columns: 1fr auto;
       }
       .weapon-picker-header input {
         width: 100%;
@@ -1957,8 +1957,6 @@
                 </div>
                 <div class="tab-actions">
                   <button id="spell-attack-roll" type="button">Hit</button>
-                  <button id="add-spell" type="button">Add Spell</button>
-                  <button id="remove-spell" type="button">Remove Spell</button>
                 </div>
               </div>
             </div>
@@ -1989,6 +1987,18 @@
       </div>
       <div class="item-panel-body" id="item-panel-body"></div>
     </aside>
+    <aside class="item-panel spell-book-panel" id="spell-book-panel" aria-live="polite" aria-label="Spell Book" aria-hidden="true">
+      <div class="item-panel-header">
+        <h2 class="item-panel-title" id="spell-book-title">Spell Book</h2>
+        <button class="item-panel-close" id="spell-book-close" type="button" aria-label="Close spell book">✕</button>
+      </div>
+      <div class="item-panel-body" id="spell-book-body">
+        <div class="tab-actions">
+          <button id="add-spell" type="button">Add Spell</button>
+          <button id="remove-spell" type="button">Remove Spell</button>
+        </div>
+      </div>
+    </aside>
     <aside class="weapon-picker" id="weapon-picker" aria-live="polite" aria-label="Weapon picker" aria-hidden="true">
       <div class="weapon-picker-header">
         <input id="weapon-search" type="search" placeholder="Search weapons..." />
@@ -2016,7 +2026,6 @@
       <div class="weapon-picker-header">
         <div class="picker-title">Choose alignment</div>
         <button id="alignment-picker-add" class="weapon-picker-add" type="button" disabled>Add</button>
-        <button id="alignment-picker-close" class="weapon-picker-close" type="button">X</button>
       </div>
       <div id="alignment-picker-list"></div>
     </aside>
@@ -2065,7 +2074,6 @@
       <div class="weapon-picker-header">
         <div class="picker-title">Class starting equipment</div>
         <button id="class-equipment-apply" class="weapon-picker-add" type="button">Apply</button>
-        <button id="class-equipment-close" class="weapon-picker-close" type="button">X</button>
       </div>
       <div class="class-equipment-body" id="class-equipment-body"></div>
     </aside>
@@ -2221,6 +2229,7 @@
       const spellAttackRollBtn = document.getElementById("spell-attack-roll");
       const addSpellBtn = document.getElementById("add-spell");
       const removeSpellBtn = document.getElementById("remove-spell");
+      const spellBookBtn = document.getElementById("spell-book-btn");
       const addItemBtn = document.getElementById("add-item");
       const activeWeaponLabel = document.getElementById("active-weapon-label");
       const equipStatusEl = document.getElementById("equip-status");
@@ -2240,7 +2249,6 @@
       const alignmentPicker = document.getElementById("alignment-picker");
       const alignmentPickerList = document.getElementById("alignment-picker-list");
       const alignmentPickerAdd = document.getElementById("alignment-picker-add");
-      const alignmentPickerClose = document.getElementById("alignment-picker-close");
       const alignmentPickerTitle = alignmentPicker?.querySelector(".picker-title") || null;
       const spellPicker = document.getElementById("spell-picker");
       const spellPickerList = document.getElementById("spell-picker-list");
@@ -2265,7 +2273,6 @@
       const classEquipmentPicker = document.getElementById("class-equipment-picker");
       const classEquipmentBody = document.getElementById("class-equipment-body");
       const classEquipmentApply = document.getElementById("class-equipment-apply");
-      const classEquipmentClose = document.getElementById("class-equipment-close");
       const backgroundPicker = document.getElementById("background-picker");
       const backgroundPickerList = document.getElementById("background-picker-list");
       const backgroundSearch = document.getElementById("background-search");
@@ -2291,6 +2298,8 @@
       const itemPanelTitle = document.getElementById("item-panel-title");
       const itemPanelBody = document.getElementById("item-panel-body");
       const itemPanelClose = document.getElementById("item-panel-close");
+      const spellBookPanel = document.getElementById("spell-book-panel");
+      const spellBookClose = document.getElementById("spell-book-close");
       const equipmentListEl = document.getElementById("equipment-list");
       const itemsListEl = document.getElementById("items-list");
       let equipmentItems = [];
@@ -2315,6 +2324,9 @@
       let equippedShieldId = "";
       let isRemoteUpdate = false;
       let saveTimer = null;
+      let didLoadLocalSheet = false;
+      let localSheetHadSpellData = false;
+      let didHandleInitialSheetSnapshot = false;
       let rollWindowHideTimer = null;
       const ROLL_WINDOW_HIDE_MS = 10000;
       let currentRaceSpeed = "";
@@ -2624,6 +2636,7 @@
           }
         }
         syncClassLevelProgressionForCurrentCharacter();
+        maybePromptSpellSelectionAfterCoreSetup();
 
         if (passivePerceptionEl) {
           const perceptionRow = skillRows.find(
@@ -4617,6 +4630,7 @@
       let requireBackgroundAfterClassEquipment = false;
       let newCharacterSetupFlowActive = false;
       let selectedRaceSubclass = "";
+      let lastAutoSpellPromptSignature = "";
 
       function roll4d6DropLowest() {
         const rolls = [];
@@ -4933,6 +4947,7 @@
         setAlignmentPickerOpen(false);
         scheduleSave();
         if (handler) handler(selected);
+        maybePromptSpellSelectionAfterCoreSetup();
       }
 
       function openSubclassChoicePicker(options, {
@@ -5061,6 +5076,7 @@
             }
             setSizePickerOpen(false);
             scheduleSave();
+            maybePromptSpellSelectionAfterCoreSetup();
           });
           list.appendChild(option);
         });
@@ -5079,6 +5095,7 @@
           if (sizeInput) sizeInput.value = "";
           renderTraitsList();
           buildCantripPickerList(spellSearch?.value || "");
+          maybePromptSpellSelectionAfterCoreSetup();
           return;
         }
         const race = getRaceData(raceName);
@@ -5099,17 +5116,20 @@
         if (sizes.length <= 1) {
           if (sizeInput) sizeInput.value = sizes[0] || "";
           buildCantripPickerList(spellSearch?.value || "");
+          maybePromptSpellSelectionAfterCoreSetup();
           return;
         }
         if (promptForSize) {
           openSizePicker(sizes);
           buildCantripPickerList(spellSearch?.value || "");
+          maybePromptSpellSelectionAfterCoreSetup();
           return;
         }
         if (sizeInput && (!sizeInput.value || !sizes.includes(sizeInput.value))) {
           sizeInput.value = sizes[0];
         }
         buildCantripPickerList(spellSearch?.value || "");
+        maybePromptSpellSelectionAfterCoreSetup();
       }
 
       function rollDiceDetailed(dice) {
@@ -5303,6 +5323,112 @@
         const cap = getSpellLearnCapForLevel(level);
         const learned = getLearnedSpellCountForLevel(level);
         return learned < cap;
+      }
+
+      function setSpellSearchPlaceholderForLevel(level) {
+        if (!spellSearch) return;
+        spellSearch.placeholder = level === 1
+          ? "Search level 1 spells..."
+          : level === 2
+            ? "Search level 2 spells..."
+            : level === 3
+              ? "Search level 3 spells..."
+              : level > 3
+                ? `No spell data for level ${level}...`
+                : "Search cantrips...";
+      }
+
+      function refreshSpellPickerForCurrentTab() {
+        cantripSelected = "";
+        if (spellPickerAdd) {
+          spellPickerAdd.disabled = !cantripSelected || !canLearnAnotherSpellAtLevel(getActiveSpellTabLevel());
+        }
+        buildCantripPickerList(spellSearch?.value || "");
+        setSpellSearchPlaceholderForLevel(getActiveSpellTabLevel());
+      }
+
+      function getNextLearnableSpellLevel() {
+        const candidateLevels = [0, 1, 2, 3];
+        for (const level of candidateLevels) {
+          if (getSpellLearnCapForLevel(level) <= 0) continue;
+          if (canLearnAnotherSpellAtLevel(level)) return level;
+        }
+        return -1;
+      }
+
+      function hasCompleteCoreSpellPrereqs() {
+        if (!classesLoaded || !racesLoaded) return false;
+        const className = String(classInput?.value || "").trim();
+        const raceName = String(raceInput?.value || "").trim();
+        if (!className || !raceName) return false;
+        const classEntry = classByName.get(className);
+        const raceEntry = raceByName.get(raceName);
+        if (!classEntry || !raceEntry) return false;
+
+        const classSubclassNames = getClassSubclassNames(classEntry);
+        const selectedSubclass = String(subclassInput?.value || "").trim();
+        if (classSubclassNames.length && !classSubclassNames.includes(selectedSubclass)) {
+          return false;
+        }
+
+        const raceSizes = normalizeRaceSizes(raceEntry.size);
+        const selectedSize = String(sizeInput?.value || "").trim();
+        if (raceSizes.length && !raceSizes.includes(selectedSize)) {
+          return false;
+        }
+
+        return true;
+      }
+
+      function hasBlockingCharacterPickerOpen() {
+        const pickerEls = [
+          abilityPicker,
+          racePicker,
+          sizePicker,
+          classPicker,
+          classEquipmentPicker,
+          alignmentPicker,
+          backgroundPicker,
+          backgroundConfigPicker,
+        ];
+        return pickerEls.some((el) => el?.classList.contains("open"));
+      }
+
+      function setActiveSpellTabLevel(level) {
+        const clamped = Math.max(0, Math.floor(Number(level) || 0));
+        const tabInput = document.getElementById(`spell-tab-${clamped + 1}`);
+        if (!tabInput) return;
+        tabInput.checked = true;
+        tabInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      function maybePromptSpellSelectionAfterCoreSetup({ force = false } = {}) {
+        const hasCoreSelections = hasCompleteCoreSpellPrereqs();
+        const nextLevel = hasCoreSelections ? getNextLearnableSpellLevel() : -1;
+        if (addSpellBtn) {
+          addSpellBtn.disabled = !hasCoreSelections || nextLevel < 0;
+        }
+        if (!hasCoreSelections || nextLevel < 0) {
+          lastAutoSpellPromptSignature = "";
+          return;
+        }
+        if (hasBlockingCharacterPickerOpen()) return;
+        if (spellPicker?.classList.contains("open")) return;
+
+        const signature = [
+          String(classInput?.value || "").trim(),
+          String(subclassInput?.value || "").trim(),
+          String(raceInput?.value || "").trim(),
+          String(selectedRaceSubclass || "").trim(),
+          String(sizeInput?.value || "").trim(),
+          String(getCurrentCharacterLevel()),
+        ].join("|");
+        if (!force && signature === lastAutoSpellPromptSignature) return;
+
+        lastAutoSpellPromptSignature = signature;
+        setActiveSpellTabLevel(nextLevel);
+        setSpellPickerOpen(true);
+        refreshSpellPickerForCurrentTab();
       }
 
       function getCumulativeClassFeatures(className, level) {
@@ -6837,6 +6963,7 @@
           openAlignmentPicker(entry, { required: false, finalizeOnPick: false });
         }
         finalizeClassSelection(entry);
+        maybePromptSpellSelectionAfterCoreSetup();
       }
 
       function buildBackgroundPickerList(filterText = "") {
@@ -7681,26 +7808,6 @@
       }
 
       function initSpellPicker() {
-        const refreshSpellPickerForCurrentTab = () => {
-          cantripSelected = "";
-          if (spellPickerAdd) {
-            spellPickerAdd.disabled = !cantripSelected || !canLearnAnotherSpellAtLevel(getActiveSpellTabLevel());
-          }
-          buildCantripPickerList(spellSearch?.value || "");
-          if (spellSearch) {
-            const level = getActiveSpellTabLevel();
-            spellSearch.placeholder = level === 1
-              ? "Search level 1 spells..."
-              : level === 2
-                ? "Search level 2 spells..."
-                : level === 3
-                  ? "Search level 3 spells..."
-                  : level > 3
-                    ? `No spell data for level ${level}...`
-                    : "Search cantrips...";
-          }
-        };
-
         if (addSpellBtn) {
           addSpellBtn.addEventListener("click", () => {
             if (itemPanel) {
@@ -7757,6 +7864,7 @@
               itemPanel.setAttribute("aria-hidden", "true");
             }
             setSpellPickerOpen(false);
+            maybePromptSpellSelectionAfterCoreSetup({ force: true });
           });
         }
         if (spellPickerClose) {
@@ -7773,6 +7881,7 @@
               spellLevel1Items = spellLevel1Items.slice(0, -1);
               renderSpellLevel1();
               scheduleSave();
+              maybePromptSpellSelectionAfterCoreSetup();
               return;
             }
             if (activeLevel === 2) {
@@ -7780,6 +7889,7 @@
               spellLevel2Items = spellLevel2Items.slice(0, -1);
               renderSpellLevel2();
               scheduleSave();
+              maybePromptSpellSelectionAfterCoreSetup();
               return;
             }
             if (activeLevel === 3) {
@@ -7787,6 +7897,7 @@
               spellLevel3Items = spellLevel3Items.slice(0, -1);
               renderSpellLevel3();
               scheduleSave();
+              maybePromptSpellSelectionAfterCoreSetup();
               return;
             }
             if (activeLevel > 3) return;
@@ -7794,6 +7905,7 @@
             cantripItems = cantripItems.slice(0, -1);
             renderCantrips();
             scheduleSave();
+            maybePromptSpellSelectionAfterCoreSetup();
           });
         }
         spellTabInputs.forEach((input) => {
@@ -7807,6 +7919,7 @@
           }
         });
         refreshSpellPickerForCurrentTab();
+        maybePromptSpellSelectionAfterCoreSetup();
         renderCantrips();
         renderSpellLevel1();
         renderSpellLevel2();
@@ -8024,13 +8137,6 @@
             commitPendingSubclassSelection();
           });
         }
-        if (alignmentPickerClose) {
-          alignmentPickerClose.addEventListener("click", (event) => {
-            event.stopPropagation();
-            if (subclassPickerLocked) return;
-            setAlignmentPickerOpen(false);
-          });
-        }
         document.addEventListener("keydown", (event) => {
           if (event.key === "Escape") {
             if (subclassPickerLocked) return;
@@ -8101,12 +8207,7 @@
               requireBackgroundAfterClassEquipment = false;
               startRequiredBackgroundSelection();
             }
-          });
-        }
-        if (classEquipmentClose) {
-          classEquipmentClose.addEventListener("click", (event) => {
-            event.stopPropagation();
-            setClassEquipmentOpen(false);
+            maybePromptSpellSelectionAfterCoreSetup();
           });
         }
         document.addEventListener("keydown", (event) => {
@@ -8189,6 +8290,7 @@
                 openClassEquipmentPicker(classEntry);
               }
             }
+            maybePromptSpellSelectionAfterCoreSetup();
           });
         }
         if (backgroundConfigClose) {
@@ -8528,6 +8630,13 @@
           const raw = localStorage.getItem(LOCAL_SHEET_STORAGE_KEY);
           if (!raw) return;
           const data = JSON.parse(raw);
+          didLoadLocalSheet = true;
+          localSheetHadSpellData = Boolean(
+            (Array.isArray(data?.cantripItems) && data.cantripItems.length) ||
+            (Array.isArray(data?.spellLevel1Items) && data.spellLevel1Items.length) ||
+            (Array.isArray(data?.spellLevel2Items) && data.spellLevel2Items.length) ||
+            (Array.isArray(data?.spellLevel3Items) && data.spellLevel3Items.length)
+          );
           applySheetData(data);
         } catch (error) {
           console.error("Failed to load local sheet", error);
@@ -8536,10 +8645,11 @@
 
       function scheduleSave() {
         if (isRemoteUpdate) return;
+        // Persist local state immediately so reloads keep the latest edits.
+        saveLocalSheet(buildSheetPayload());
         if (saveTimer) clearTimeout(saveTimer);
         saveTimer = setTimeout(async () => {
           const payload = buildSheetPayload();
-          saveLocalSheet(payload);
           try {
             await setDoc(sheetRef, payload, { merge: true });
           } catch (error) {
@@ -8657,6 +8767,18 @@
 
       onSnapshot(sheetRef, (snap) => {
         const data = snap.data();
+        if (!didHandleInitialSheetSnapshot) {
+          didHandleInitialSheetSnapshot = true;
+          const remoteHasNoSpellData = !data || (
+            (!Array.isArray(data.cantripItems) || data.cantripItems.length === 0) &&
+            (!Array.isArray(data.spellLevel1Items) || data.spellLevel1Items.length === 0) &&
+            (!Array.isArray(data.spellLevel2Items) || data.spellLevel2Items.length === 0) &&
+            (!Array.isArray(data.spellLevel3Items) || data.spellLevel3Items.length === 0)
+          );
+          if (didLoadLocalSheet && localSheetHadSpellData && remoteHasNoSpellData) {
+            return;
+          }
+        }
         applySheetData(data);
         if (data) {
           saveLocalSheet(buildSheetPayload());
@@ -8732,6 +8854,7 @@
           }
         }
         syncClassLevelProgressionForCurrentCharacter({ force: true });
+        maybePromptSpellSelectionAfterCoreSetup();
       }
       initApp();
       startupNewCharacterBtn?.addEventListener("click", async () => {
@@ -9362,11 +9485,35 @@
         });
       }
 
+      function setupSpellBookPanel() {
+        if (!spellBookPanel || !spellBookClose) return;
+        spellBookBtn?.addEventListener("click", () => {
+          if (itemPanel) {
+            itemPanel.classList.remove("open");
+            itemPanel.setAttribute("aria-hidden", "true");
+          }
+          spellBookPanel.classList.add("open");
+          spellBookPanel.setAttribute("aria-hidden", "false");
+        });
+        spellBookClose.addEventListener("click", (event) => {
+          event.stopPropagation();
+          spellBookPanel.classList.remove("open");
+          spellBookPanel.setAttribute("aria-hidden", "true");
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") {
+            spellBookPanel.classList.remove("open");
+            spellBookPanel.setAttribute("aria-hidden", "true");
+          }
+        });
+      }
+
       setupRollables();
       setupAttackRoll();
       setupSpellAttackRoll();
       setupInitiativeRoll();
       setupItemPanel();
+      setupSpellBookPanel();
       console.log("Firebase initialized", app.name);
     </script>
   </body>
