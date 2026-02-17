@@ -609,6 +609,14 @@
       .grid-skills .list {
         gap: 3px;
       }
+      .grid-skills .list {
+        gap: 3px;
+      }
+      .list-item {
+        display: grid;
+        grid-template-columns: 18px 1fr 58px;
+        align-items: center;
+        gap: 6px;
       .list-item {
         display: grid;
         grid-template-columns: 18px 1fr 58px;
@@ -879,6 +887,7 @@
       .item-panel-close {
         border: 2px solid var(--line);
         background: #fff;
+        color: var(--fg);
         width: 32px;
         height: 32px;
         border-radius: 10px;
@@ -906,34 +915,7 @@
         color: var(--muted);
       }
       .item-tooltip {
-        position: relative;
-        cursor: help;
-      }
-      .item-tooltip::after {
-        content: attr(data-tooltip);
-        position: absolute;
-        left: 0;
-        top: 100%;
-        margin-top: 6px;
-        min-width: 160px;
-        max-width: 280px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        background: #1f1711;
-        color: #fff7ee;
-        font-size: 0.82rem;
-        line-height: 1.25;
-        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-        opacity: 0;
-        pointer-events: none;
-        transform: translateY(-4px);
-        transition: opacity 0.15s ease, transform 0.15s ease;
-        z-index: 5;
-        white-space: normal;
-      }
-      .item-tooltip:hover::after {
-        opacity: 1;
-        transform: translateY(0);
+        cursor: default;
       }
       .weapon-picker {
         position: fixed;
@@ -1283,13 +1265,13 @@
       .inventory-header,
       .inventory-row {
         display: grid;
-        grid-template-columns: 140px minmax(0, 1fr) 80px auto;
+        grid-template-columns: 1fr 80px auto;
         gap: 8px;
         align-items: start;
       }
       .inventory-header.with-qty,
       .inventory-row.with-qty {
-        grid-template-columns: 120px minmax(0, 1fr) 80px 52px 76px auto;
+        grid-template-columns: 1fr 80px 52px 76px auto;
       }
       .inventory-header {
         font-size: 0.75rem;
@@ -1490,6 +1472,16 @@
         color: var(--fg) !important;
       }
 
+      .item-panel-close {
+        background: #1b1729 !important;
+        border-color: #4a3f5e !important;
+        color: #f1ebe3 !important;
+      }
+
+      .item-panel-close:hover {
+        background: #241c33 !important;
+      }
+
       .equipment-item {
         background: #151220 !important;
         border-color: #3a324b !important;
@@ -1506,6 +1498,18 @@
         background: #1e182b !important;
         border-color: #4a3f5e !important;
         color: #d5cde0 !important;
+      }
+
+      .twohand-btn {
+        background: #1b1729 !important;
+        border-color: #4a3f5e !important;
+        color: var(--fg) !important;
+      }
+
+      .twohand-btn.active {
+        background: #2f3f66 !important;
+        border-color: #5d78ba !important;
+        color: #f3f6ff !important;
       }
 
       .inventory-header {
@@ -6604,7 +6608,8 @@
               if (classPickerAdd) {
                 classPickerAdd.disabled = false;
               }
-              commitClassPickerSelection(entry.name);
+              openClassPanel(entry);
+              buildClassPickerList(classSearch?.value || "");
             });
             const name = document.createElement("strong");
             name.textContent = entry.name;
@@ -7217,8 +7222,8 @@
         const header = document.createElement("div");
         header.className = `inventory-header${showQty ? " with-qty" : ""}`;
         header.innerHTML = showQty
-          ? "<span>Name</span><span>Description</span><span>Gold</span><span>Qty</span><span>Remove Qty</span><span>Action</span>"
-          : "<span>Name</span><span>Description</span><span>Gold</span><span>Action</span>";
+          ? "<span>Name</span><span>Gold</span><span>Qty</span><span>Remove Qty</span><span>Action</span>"
+          : "<span>Name</span><span>Gold</span><span>Action</span>";
         itemsListEl.appendChild(header);
 
         rows.forEach((entry) => {
@@ -7230,11 +7235,6 @@
           nameEl.textContent = entry.name;
           nameEl.addEventListener("click", () => openInventoryItemPanel(entry.name));
 
-          const descEl = document.createElement("div");
-          descEl.className = "inventory-desc";
-          descEl.textContent = entry.description || "--";
-          descEl.title = entry.description || "";
-
           const goldEl = document.createElement("div");
           goldEl.className = "inventory-gold";
           goldEl.textContent = formatGoldValue(entry.goldValue);
@@ -7245,7 +7245,6 @@
           removeBtn.textContent = "Remove";
 
           row.appendChild(nameEl);
-          row.appendChild(descEl);
           row.appendChild(goldEl);
           if (showQty) {
             const qtyEl = document.createElement("div");
